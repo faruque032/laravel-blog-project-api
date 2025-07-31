@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 
 class BlogPost extends Model
 {
@@ -14,31 +15,83 @@ class BlogPost extends Model
     protected $fillable = [
         'title',
         'content',
-        'author',
+        'excerpt',
+        'slug',
+        'status',
         'published_at',
-        'status'
+        'author_id',
+        'meta_title',
+        'meta_description'
     ];
 
     protected $casts = [
         'published_at' => 'datetime',
         'created_at' => 'datetime',
-        'updated_at' => 'datetime',
+        'updated_at' => 'datetime'
     ];
 
-    public function scopePublished($query)
+    /**
+     * Scope to filter published posts
+     */
+    public function scopePublished(Builder $query): Builder
     {
-        return $query->where('status', 'published');
+        return $query->where('status', 'published')
+                    ->where('published_at', '<=', now());
     }
 
-    public function scopeSearch($query, $search)
+    /**
+     * Scope to search posts by title and content
+     */
+    public function scopeSearch(Builder $query, ?string $search): Builder
     {
-        if ($search) {
-            return $query->where(function ($q) use ($search) {
-                $q->where('title', 'like', '%' . $search . '%')
-                  ->orWhere('content', 'like', '%' . $search . '%')
-                  ->orWhere('author', 'like', '%' . $search . '%');
-            });
+        if (empty($search)) {
+            return $query;
         }
-        return $query;
+
+        return $query->where(function ($q) use ($search) {
+            $q->where('title', 'LIKE', '%' . $search . '%')
+              ->orWhere('content', 'LIKE', '%' . $search . '%')
+              ->orWhere('excerpt', 'LIKE', '%' . $search . '%');
+        });
+    }
+
+    /**
+     * Get the route key for the model
+     */
+    public function getRouteKeyName(): string
+    {
+        return 'slug';
+    }
+
+    /**
+     * Get the post's excerpt or generate one from content
+     */
+    public function getExcerptAttribute($value): string
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+
+        return strlen($this->content) > 150 
+            ? substr(strip_tags($this->content), 0, 150) . '...' 
+            : strip_tags($this->content);
+    }
+
+    /**
+     * Get formatted published date
+     */
+    public function getFormattedDateAttribute(): string
+    {
+        return $this->published_at ? $this->published_at->format('M d, Y') : '';
+    }
+
+    /**
+     * Check if post is published
+     */
+    public function isPublished(): bool
+    {
+        return $this->status === 'published' && 
+               $this->published_at && 
+               $this->published_at->isPast();
     }
 }
